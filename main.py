@@ -36,8 +36,6 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-# httpx logs every request URL at INFO, which includes the bot token. Keep it quiet.
-logging.getLogger("httpx").setLevel(logging.WARNING)
 
 db = Database(config.DB_PATH)
 
@@ -771,14 +769,26 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if not user:
         return
 
-    lang = await db.get_language()
-    admin_tag = "✅ Admin" if is_admin(user.id) else "⚠️ Not Admin"
-    msg = t("welcome_title", lang, user_id=user.id, admin_tag=admin_tag)
-    await update.message.reply_text(
-        msg,
-        parse_mode=ParseMode.HTML,
-        reply_markup=get_main_menu_keyboard(lang)
-    )
+    logger.info(f"Received /start from user ID: {user.id} ({user.full_name})")
+    try:
+        lang = await db.get_language()
+        admin_tag = "✅ Admin" if is_admin(user.id) else "⚠️ Not Admin"
+        msg = t("welcome_title", lang, user_id=user.id, admin_tag=admin_tag)
+        await update.message.reply_text(
+            msg,
+            parse_mode=ParseMode.HTML,
+            reply_markup=get_main_menu_keyboard(lang)
+        )
+        logger.info(f"Sent /start reply successfully to user {user.id}")
+    except Exception as e:
+        logger.error(f"Error in start_command: {e}", exc_info=True)
+        try:
+            # Fallback simple message in case HTML or keyboard had an issue
+            await update.message.reply_text(
+                f"👋 Welcome! Your Telegram ID: {user.id}\nBot is running properly."
+            )
+        except Exception as e2:
+            logger.error(f"Fallback reply also failed: {e2}")
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -854,10 +864,19 @@ async def handle_text_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 
 async def post_init(application: Application) -> None:
-    await db.init()
-    logger.info("Database initialized successfully.")
-    bot_info = await application.bot.get_me()
-    logger.info(f"Bot started as @{bot_info.username} (ID: {bot_info.id})")
+    logger.info("Initializing database...")
+    try:
+        await db.init()
+        logger.info("Database initialized successfully.")
+    except Exception as e:
+        logger.error(f"Error initializing database: {e}", exc_info=True)
+
+    try:
+        bot_info = await application.bot.get_me()
+        logger.info(f"Bot connected successfully as @{bot_info.username} (ID: {bot_info.id})")
+    except Exception as e:
+        logger.error(f"Error fetching bot info: {e}", exc_info=True)
+
     asyncio.create_task(daily_report_background_worker(application))
 
 
@@ -870,12 +889,6 @@ def main() -> None:
         Application.builder()
         .token(config.BOT_TOKEN)
         .post_init(post_init)
-        .connect_timeout(30)
-        .read_timeout(30)
-        .write_timeout(30)
-        .pool_timeout(30)
-        .get_updates_connect_timeout(30)
-        .get_updates_read_timeout(60)
         .build()
     )
 
@@ -901,11 +914,9 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(handle_settings_callback, pattern=r"^set:"))
     application.add_handler(CallbackQueryHandler(handle_language_callback, pattern=r"^lang:"))
 
-    logger.info("Starting bot polling loop...")
+    logger.info("Starting bot polling loop with drop_pending_updates=True...")
     application.run_polling(
-        # Retry the initial Telegram handshake (get_me, delete_webhook) forever
-        # instead of crashing on a transient timeout or flood-control wait.
-        bootstrap_retries=-1,
+        drop_pending_updates=True,
         allowed_updates=[
             Update.CHAT_MEMBER,
             Update.MESSAGE,
