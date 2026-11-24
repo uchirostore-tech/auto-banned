@@ -12,7 +12,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy bot code
 COPY . .
 
-# Mount point for the Railway volume holding the SQLite database
+# Create volume mount point for persistent SQLite database
 RUN mkdir -p /app/data
+
+VOLUME ["/app/data"]
 
 CMD ["python", "main.py"]
