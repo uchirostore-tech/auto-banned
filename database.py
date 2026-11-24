@@ -1,6 +1,7 @@
 import sqlite3
 import asyncio
 import json
+from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any, List
 
@@ -17,12 +18,13 @@ class Database:
         self.db_path = db_path
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, timeout=10.0)
+        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(self.db_path, timeout=30.0)
         conn.row_factory = sqlite3.Row
-        # Blazing fast WAL mode and cache pragmas
-        conn.execute("PRAGMA journal_mode = WAL;")
-        conn.execute("PRAGMA synchronous = NORMAL;")
-        conn.execute("PRAGMA cache_size = -64000;")  # 64MB cache
+        try:
+            conn.execute("PRAGMA synchronous = NORMAL;")
+        except Exception:
+            pass
         return conn
 
     def _init_sync(self):
@@ -346,6 +348,9 @@ class Database:
 
     async def get_daily_summary(self, target_date: Optional[datetime] = None) -> Dict[str, Any]:
         return await asyncio.to_thread(self._get_daily_summary_sync, target_date)
+
+    async def get_stats(self) -> Dict[str, Any]:
+        return await self.get_daily_summary()
 
     # --- Lookup & Search ---
     def _lookup_user_sync(self, query: str) -> Dict[str, Any]:
