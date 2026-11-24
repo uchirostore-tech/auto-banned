@@ -868,6 +868,12 @@ def main() -> None:
         Application.builder()
         .token(config.BOT_TOKEN)
         .post_init(post_init)
+        .connect_timeout(30)
+        .read_timeout(30)
+        .write_timeout(30)
+        .pool_timeout(30)
+        .get_updates_connect_timeout(30)
+        .get_updates_read_timeout(60)
         .build()
     )
 
@@ -895,6 +901,9 @@ def main() -> None:
 
     logger.info("Starting bot polling loop...")
     application.run_polling(
+        # Retry the initial Telegram handshake (get_me, delete_webhook) forever
+        # instead of crashing on a transient timeout or flood-control wait.
+        bootstrap_retries=-1,
         allowed_updates=[
             Update.CHAT_MEMBER,
             Update.MESSAGE,
