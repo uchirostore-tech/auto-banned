@@ -1,0 +1,23 @@
+# Environments & secrets
+.env
+.env.local
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Database files
+data/
+*.db
+*.sqlite3
+
+# Railway / IDE
+.railway
+.idea/
+.vscode/
