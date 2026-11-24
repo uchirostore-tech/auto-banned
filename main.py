@@ -36,6 +36,8 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+# httpx logs every request URL at INFO, which includes the bot token. Keep it quiet.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 db = Database(config.DB_PATH)
 
